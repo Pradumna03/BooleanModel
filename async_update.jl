@@ -1,6 +1,6 @@
 
 
-function asyncInit(update_matrix::Array{Int,2},
+function asyncInit(update_matrix::Union{Array{Int,2}, Array{Float64, 2}},
     nIter::Int, state::Array{Int,1})
     # state = rand(stateVec, n_nodes) #pick random state
     init = join(["'", join(replace(x -> x == -1 ? 0 : x, state)), "'"])

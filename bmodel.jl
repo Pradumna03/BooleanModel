@@ -1,6 +1,8 @@
+using Base: Float64
 include("dependencies.jl")
 include("utils.jl")
 include("async_update.jl")
+include("coherence.jl")
 
 #=
 Author : Kishore Hari
@@ -82,6 +84,14 @@ function bmodel_reps(topoFile::String; nInit::Int64=10000, nIter::Int64=1000,
     if length(Nodes)>60
         print("Network is too big")
         return 0
+    end
+    if !randSim
+        nodesName = join([replace(topoFile, ".topo" => ""), "_nodes.txt"])
+        io = open(nodesName, "w")
+        for i in Nodes
+            println(io, i)
+        end
+        close(io);
     end
     finFreqFinal_df_list_list = []
     finFlagFreqFinal_df_list_list = []
@@ -202,6 +212,8 @@ function bmodel_reps(topoFile::String; nInit::Int64=10000, nIter::Int64=1000,
     if stateRep == 0
         rootName = join([rootName, "0"])
     end
+
+    # write csv files
     finFreqName = join([rootName, "_finFreq.csv"])
     finFlagFreqName = join([rootName, "_finFlagFreq.csv"])
 
@@ -214,16 +226,7 @@ function bmodel_reps(topoFile::String; nInit::Int64=10000, nIter::Int64=1000,
         CSV.write(initFinFlagFreqName, initFinFlagFreqFinal_df)
     end
 
-    # write csv files
-    if !randSim
-        nodesName = join([replace(topoFile, ".topo" => ""), "_nodes.txt"])
-        update_matrix,Nodes = topo2interaction(topoFile)
-        io = open(nodesName, "w")
-        for i in Nodes
-            println(io, i)
-        end
-        close(io);
-    end
+    
     # return the dataframes
     if init
         return(finFreqFinal_df, finFlagFreqFinal_df, 
@@ -237,6 +240,11 @@ function edgeWeightPert(topoFile::String; nPerts::Int=10000, nInit::Int64=10000,
     mode::String="Async", stateRep::Int64=-1, reps::Int = 3, csv::Bool=false, 
     types::Array{Int, 1} = [0,1,2],init::Bool=false, randSim::Bool=true)
     updMat, nodes = topo2interaction(topoFile)
+    io = open(nodesName, "w")
+    for i in nodes
+        println(io, i)
+    end
+    close(io);
     nZ = length(findall(updMat.!=0))
     nRand = nZ*nPerts
     rands = reshape(rand(nRand), nPerts, nZ)
@@ -252,12 +260,6 @@ function edgeWeightPert(topoFile::String; nPerts::Int=10000, nInit::Int64=10000,
         randVec = rands[i,:], types = types)
     end
     nodesName = join([replace(topoFile, ".topo" => ""), "_nodes.txt"])
-        update_matrix,Nodes = topo2interaction(topoFile)
-        io = open(nodesName, "w")
-        for i in Nodes
-            println(io, i)
-        end
-    close(io);
     cd(d1)
 
 end
