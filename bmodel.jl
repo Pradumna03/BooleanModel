@@ -23,12 +23,17 @@ Active outputs :
 Passive outputs :
     The function writes states_df to a csv file if csv = true in input
 =#
-function bmodel(topoFile::String, nInit::Int64=10000, nIter::Int64=1000,
-    mode::String="Async", stateRep::Int64=-1, rep::Int = 1, type::Int=0)
+function bmodel(topoFile::String; nInit::Int64=10000, nIter::Int64=1000,
+    mode::String="Async", stateRep::Int64=-1, type::Int=0, randSim::Bool = false,
+    randVec::Array{Float64, 1})
     update_matrix,Nodes = topo2interaction(topoFile, type)
     if mode == "Async"
         if stateRep == -1
-            state_df, frust_df = asyncUpdate(update_matrix, nInit, nIter)
+            if randSim
+                state_df, frust_df = asyncRandUpdate(update_matrix, nInit, nIter, randVec)
+            else 
+                state_df, frust_df = asyncUpdate(update_matrix, nInit, nIter)
+            end
         else
             state_df, frust_df = asyncUpdate2(update_matrix, nInit, nIter)
         end
@@ -69,9 +74,10 @@ Passive outputs :
     The function writes finFreqFinal_df, finFlagFreqFinal_df, initFinFlagFreqFinal_df to files.
 =#
 
-function bmodel_reps(topoFile::String, nInit::Int64=10000, nIter::Int64=1000,
+function bmodel_reps(topoFile::String; nInit::Int64=10000, nIter::Int64=1000,
     mode::String="Async", stateRep::Int64=-1, reps::Int = 3, csv::Bool=false, 
-    types::Array{Int, 1} = [0,1,2],init::Bool=false)
+    types::Array{Int, 1} = [0,1,2],init::Bool=false, randSim::Bool=false, root::String="", 
+    randVec::Array{Float64,1}=[0.0])
     update_matrix,Nodes = topo2interaction(topoFile)
     if length(Nodes)>60
         print("Network is too big")
@@ -91,8 +97,9 @@ function bmodel_reps(topoFile::String, nInit::Int64=10000, nIter::Int64=1000,
         frust_df_list = []
 
         for rep in 1:reps
-            states_df, Nodes, frust_df = bmodel(topoFile, nInit, 
-                nIter, mode, stateRep, rep, type)
+            states_df, Nodes, frust_df = bmodel(topoFile; nInit = nInit, 
+                nIter = nIter, mode = mode, stateRep = stateRep, type = type, 
+                randSim = randSim, randVec = randVec)
             # state_df = dropmissing(state_df, disallowmissing = true)
             push!(frust_df_list, frust_df)
             # Frequnecy table 
@@ -172,20 +179,26 @@ function bmodel_reps(topoFile::String, nInit::Int64=10000, nIter::Int64=1000,
     if init
         initFinFlagFreqFinal_df = initFinFlagFreqFinal_df_list_list[1]
     end
-    for i in 2:reps
-        finFreqFinal_df = outerjoin(finFreqFinal_df, finFreqFinal_df_list_list[i], 
-            on = [:states], makeunique = true)
-        finFlagFreqFinal_df = outerjoin(finFlagFreqFinal_df, 
-            finFlagFreqFinal_df_list_list[i], 
-            on = [:states, :flag], makeunique=true)
-        if init
-            initFinFlagFreqFinal_df = outerjoin(initFinFlagFreqFinal_df, 
-                initFinFlagFreqFinal_df_list_list[i],
-                on = [:init, :states, :flag], makeunique = true)
+    n = length(types)
+    if n > 1
+        for i in 2:n
+            finFreqFinal_df = outerjoin(finFreqFinal_df, finFreqFinal_df_list_list[i], 
+                on = [:states], makeunique = true)
+            finFlagFreqFinal_df = outerjoin(finFlagFreqFinal_df, 
+                finFlagFreqFinal_df_list_list[i], 
+                on = [:states, :flag], makeunique=true)
+            if init
+                initFinFlagFreqFinal_df = outerjoin(initFinFlagFreqFinal_df, 
+                    initFinFlagFreqFinal_df_list_list[i],
+                    on = [:init, :states, :flag], makeunique = true)
+            end
         end
     end
+    
 
     rootName = replace(topoFile, ".topo" => "")
+    rootName = join([rootName, "_",root])
+    # println(rootName)
     if stateRep == 0
         rootName = join([rootName, "0"])
     end
@@ -202,13 +215,15 @@ function bmodel_reps(topoFile::String, nInit::Int64=10000, nIter::Int64=1000,
     end
 
     # write csv files
-    nodesName = join([replace(topoFile, ".topo" => ""), "_nodes.txt"])
-    update_matrix,Nodes = topo2interaction(topoFile)
-    io = open(nodesName, "w")
-    for i in Nodes
-        println(io, i)
+    if !randSim
+        nodesName = join([replace(topoFile, ".topo" => ""), "_nodes.txt"])
+        update_matrix,Nodes = topo2interaction(topoFile)
+        io = open(nodesName, "w")
+        for i in Nodes
+            println(io, i)
+        end
+        close(io);
     end
-    close(io);
     # return the dataframes
     if init
         return(finFreqFinal_df, finFlagFreqFinal_df, 
@@ -218,7 +233,34 @@ function bmodel_reps(topoFile::String, nInit::Int64=10000, nIter::Int64=1000,
     end
 end
 
+function edgeWeightPert(topoFile::String; nPerts::Int=10000, nInit::Int64=10000, nIter::Int64=1000,
+    mode::String="Async", stateRep::Int64=-1, reps::Int = 3, csv::Bool=false, 
+    types::Array{Int, 1} = [0,1,2],init::Bool=false, randSim::Bool=true)
+    updMat, nodes = topo2interaction(topoFile)
+    nZ = length(findall(updMat.!=0))
+    nRand = nZ*nPerts
+    rands = reshape(rand(nRand), nPerts, nZ)
+    randFold = replace(topoFile, ".topo" => "_rand")
+    d1 = pwd()
+    mkpath(randFold)
+    cpPath = join([randFold, "/", topoFile])
+    cp(topoFile, cpPath, force = true)
+    cd(randFold)
+    Threads.@threads for i in 1:nPerts
+        # println(string(i))
+        bmodel_reps(topoFile; nInit = nInit, nIter = nIter, mode = mode, stateRep = stateRep, randSim=true, root = string(i), 
+        randVec = rands[i,:], types = types)
+    end
+    nodesName = join([replace(topoFile, ".topo" => ""), "_nodes.txt"])
+        update_matrix,Nodes = topo2interaction(topoFile)
+        io = open(nodesName, "w")
+        for i in Nodes
+            println(io, i)
+        end
+    close(io);
+    cd(d1)
 
+end
 
 function stg(topoFile::String, mode::String="Async")
     print(topoFile)

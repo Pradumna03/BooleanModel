@@ -70,6 +70,19 @@ function frustration(state::Array{Int,1},
     frustration = frustration/nEdges
     return frustration
 end
+function frustration(state::Array{Int,1}, 
+    nonZeros::Tuple{Array{Int64,1},Array{Int64,1},Array{Float64,1}})
+    frustration = 0
+    nEdges = length(nonZeros[1])
+    for (x,y,v) in zip(nonZeros...)
+        s = state[x]*state[y]*v
+        if s<0
+            frustration = frustration + 1
+        end
+    end
+    frustration = frustration/nEdges
+    return frustration
+end
 
 ## 
 function frustration0(state::Array{Int,1}, 
@@ -141,3 +154,9 @@ end
 function zeroConv(state::Array{Int64,1})
     replace(x -> x == -1 ? 0 : x, sign.(state))
 end
+
+function zeroConv(state::Array{Float64,1})
+    replace(x -> x == -1 ? 0 : x, Int.(sign.(state)))
+end
+
+  
