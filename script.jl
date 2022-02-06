@@ -19,6 +19,6 @@ println(Threads.nthreads())
 # 	println(topoFile, " - ", y1, "and", y2, " seconds.")
 # end
 for topoFile in topoFiles
-	y3 = @elapsed x = edgeWeightPert(topoFile; nPerts = 100, nInit = 10000, types = [0])
+	y3 = @elapsed x = bmodel_reps(topoFile, 100000)
 	println(topoFile, " - ", y3, " seconds.")
 end
